@@ -8,6 +8,12 @@ import { hasSupabase, requireData, supabase } from "./supabase.js";
 
 type Client = Record<string, any>;
 type Task = Record<string, any>;
+type GeneratedIdea = {
+  title: string;
+  description: string;
+  caption: string;
+  notes: string;
+};
 
 const app = express();
 const localDir = path.join(process.cwd(), "database");
@@ -128,6 +134,29 @@ function normalizeTask(task: any) {
   return { ...task, client_name: task.clients?.name ?? task.client_name ?? null, client_segment: task.clients?.segment ?? task.client_segment ?? null, clients: undefined };
 }
 
+function extractGeminiText(payload: any) {
+  return String(payload?.candidates?.[0]?.content?.parts?.map((part: any) => part.text ?? "").join("\n") ?? "").trim();
+}
+
+function parseGeneratedIdea(text: string): GeneratedIdea {
+  try {
+    const parsed = JSON.parse(text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim());
+    return {
+      title: String(parsed.title ?? parsed.titulo ?? "Nova ideia de conteudo"),
+      description: String(parsed.description ?? parsed.descricao ?? ""),
+      caption: String(parsed.caption ?? parsed.legenda ?? ""),
+      notes: String(parsed.notes ?? parsed.observacoes ?? "")
+    };
+  } catch {
+    return {
+      title: "Nova ideia de conteudo",
+      description: text,
+      caption: "",
+      notes: "Resposta gerada fora do formato estruturado."
+    };
+  }
+}
+
 async function getClients() {
   if (hasSupabase && supabase) {
     const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false });
@@ -169,6 +198,51 @@ app.post("/api/auth/logout", (_req, res) => {
 app.use("/api", (req, res, next) => {
   if (hasSession(req)) return next();
   return res.status(401).json({ error: "Login necessario." });
+});
+
+app.post("/api/ai/idea", async (req, res, next) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "Configure GEMINI_API_KEY nas variaveis de ambiente." });
+
+    const { clientName, clientSegment, contentType, platform, goal, instruction } = req.body ?? {};
+    const prompt = `
+Voce e um estrategista de social media. Gere uma unica ideia pronta para virar tarefa.
+
+Cliente: ${clientName || "Sem cliente definido"}
+Segmento: ${clientSegment || "Nao informado"}
+Tipo de conteudo: ${contentType || "post estatico"}
+Plataforma: ${platform || "Instagram"}
+Objetivo: ${goal || "autoridade"}
+Direcao do usuario: ${instruction || "Sugira uma ideia forte e objetiva."}
+
+Responda somente em JSON valido, sem markdown, neste formato:
+{
+  "title": "titulo curto da tarefa",
+  "description": "ideia do post com conceito, gancho, roteiro ou estrutura principal",
+  "caption": "legenda sugerida ou texto de apoio",
+  "notes": "observacoes de producao, cenas, criativos ou cuidados"
+}
+`.trim();
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.8,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    const payload = await response.json() as any;
+    if (!response.ok) throw new Error(payload?.error?.message || "Erro ao gerar ideia no Gemini.");
+    res.json(parseGeneratedIdea(extractGeminiText(payload)));
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/clients", async (_req, res, next) => {

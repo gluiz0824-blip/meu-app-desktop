@@ -108,4 +108,4 @@ export type ReportData = {
   }>;
 };
 
-export type AnyRecord = Record<string, string | number | boolean | null | undefined>;
+export type AnyRecord = Record<string, string | number | boolean | null | undefined | string[]>;

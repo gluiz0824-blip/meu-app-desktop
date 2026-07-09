@@ -45,6 +45,7 @@ Defina tambem estas variaveis no `.env` local e na Vercel:
 ```text
 ADMIN_PASSWORD=sua-senha-de-acesso
 AUTH_SECRET=um-segredo-longo-aleatorio
+GEMINI_API_KEY=sua-chave-do-gemini
 ```
 
 `ADMIN_PASSWORD` e a senha usada na tela de login. `AUTH_SECRET` assina o cookie de sessao.

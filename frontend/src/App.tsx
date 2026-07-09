@@ -165,7 +165,7 @@ export function App() {
     if (page === "tarefas") return <TasksPage tasks={tasks} clients={clients} search={search} reload={load} />;
     if (page === "kanban") return <Kanban tasks={tasks} clients={clients} search={search} reload={load} onNewTask={(status) => { setQuickStatus(status); setQuickOpen(true); }} />;
     if (page === "calendario") return <CalendarPlanning tasks={tasks} clients={clients} search={search} reload={load} />;
-    if (page === "assistente") return <Assistant clients={clients} />;
+    if (page === "assistente") return <Assistant clients={clients} reload={load} />;
     if (page === "relatorios") return <ReportsPage clients={clients} />;
     if (page === "configuracoes") return <SettingsPage />;
     return <Placeholder title="Modulo" />;
