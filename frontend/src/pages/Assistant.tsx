@@ -46,7 +46,6 @@ export function Assistant({ clients, reload }: { clients: Client[]; reload: () =
   const [contentType, setContentType] = useState(defaultType);
   const [platform, setPlatform] = useState("Instagram");
   const [goal, setGoal] = useState("autoridade");
-  const [dueDate, setDueDate] = useState("");
   const [instruction, setInstruction] = useState("");
   const [idea, setIdea] = useState<Idea | null>(null);
   const [planStart, setPlanStart] = useState(nextMonday);
@@ -93,6 +92,7 @@ export function Assistant({ clients, reload }: { clients: Client[]; reload: () =
     if (!idea) return;
     setSaving(true);
     setError("");
+    const today = toDateInput(new Date());
     try {
       await api.post("/tasks", {
         title: idea.title,
@@ -100,8 +100,8 @@ export function Assistant({ clients, reload }: { clients: Client[]; reload: () =
         content_type: contentType,
         status: "ideia",
         priority: "media",
-        due_date: dueDate || null,
-        post_date: dueDate || null,
+        due_date: today,
+        post_date: today,
         platform,
         owner: "Luiz Guilherme",
         description: idea.description,
@@ -203,11 +203,6 @@ export function Assistant({ clients, reload }: { clients: Client[]; reload: () =
               </Select>
             </label>
           </div>
-
-          <label className="grid gap-2 text-sm text-[#cbd5e1]">
-            Data da tarefa
-            <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
-          </label>
 
           <label className="grid gap-2 text-sm text-[#cbd5e1]">
             O que a IA deve fazer?
