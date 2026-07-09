@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { CheckSquare, Plus, Square, Trash2 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { api } from "../services/api";
 import { Badge, Button, Card, Input, Modal, PriorityBadge, Select } from "../components/ui";
@@ -54,6 +54,8 @@ export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; c
   const [clientFilter, setClientFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [selected, setSelected] = useState<number[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   const filtered = useMemo(() => tasks.filter((task) => {
     const haystack = `${task.title} ${task.client_name ?? ""} ${task.content_type} ${task.status}`.toLowerCase();
@@ -69,6 +71,32 @@ export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; c
     await reload();
   };
 
+  const filteredIds = filtered.map((task) => task.id);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selected.includes(id));
+  const selectedInFilter = selected.filter((id) => filteredIds.includes(id));
+
+  const toggleTask = (taskId: number) => {
+    setSelected((current) => current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId]);
+  };
+
+  const toggleAllFiltered = () => {
+    setSelected((current) => {
+      if (allFilteredSelected) return current.filter((id) => !filteredIds.includes(id));
+      return Array.from(new Set([...current, ...filteredIds]));
+    });
+  };
+
+  const removeSelected = async () => {
+    if (!selected.length) return;
+    const count = selected.length;
+    if (!confirm(`Excluir ${count} tarefa${count > 1 ? "s" : ""} selecionada${count > 1 ? "s" : ""}?`)) return;
+    setDeleting(true);
+    await Promise.all(selected.map((taskId) => api.delete(`/tasks/${taskId}`)));
+    setSelected([]);
+    setDeleting(false);
+    await reload();
+  };
+
   return (
     <div className="grid gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -77,17 +105,47 @@ export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; c
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">Todos os status</option>{statusOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</Select>
           <Select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}><option value="">Todas prioridades</option>{priorityOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</Select>
         </div>
-        <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus size={18} /> Nova Tarefa</Button>
+        <div className="flex flex-wrap gap-2">
+          {selected.length > 0 && (
+            <Button variant="danger" disabled={deleting} onClick={removeSelected}>
+              <Trash2 size={17} />
+              {deleting ? "Excluindo..." : `Excluir ${selected.length}`}
+            </Button>
+          )}
+          <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus size={18} /> Nova Tarefa</Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#1e2a2f] bg-[#0b0f12] px-4 py-3 text-sm text-[#cbd5e1]">
+        <span>{selected.length ? `${selected.length} selecionada${selected.length > 1 ? "s" : ""}` : "Selecione tarefas para excluir em lote"}</span>
+        <div className="flex gap-2">
+          <Button type="button" variant="secondary" className="h-9" disabled={filtered.length === 0} onClick={toggleAllFiltered}>
+            {allFilteredSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+            {allFilteredSelected ? "Limpar lista" : "Selecionar todas"}
+          </Button>
+          {selectedInFilter.length > 0 && <Button type="button" variant="ghost" className="h-9" onClick={() => setSelected((current) => current.filter((id) => !filteredIds.includes(id)))}>Limpar filtradas</Button>}
+        </div>
       </div>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto thin-scroll">
           <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="border-b border-[#1e2a2f] bg-[#0b0f12] text-xs uppercase tracking-wide text-[#6b7280]">
-              <tr>{["Tarefa", "Cliente", "Tipo", "Status", "Prioridade", "Entrega", "Postagem", "Acoes"].map((head) => <th key={head} className="px-5 py-4">{head}</th>)}</tr>
+              <tr>
+                <th className="w-12 px-5 py-4">
+                  <button type="button" className="grid h-8 w-8 place-items-center rounded-lg text-[#cbd5e1] transition hover:bg-[#11171b] hover:text-[#00f58a]" onClick={toggleAllFiltered} aria-label="Selecionar todas">
+                    {allFilteredSelected ? <CheckSquare size={18} /> : <Square size={18} />}
+                  </button>
+                </th>
+                {["Tarefa", "Cliente", "Tipo", "Status", "Prioridade", "Entrega", "Postagem", "Acoes"].map((head) => <th key={head} className="px-5 py-4">{head}</th>)}
+              </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2a2f]">
               {filtered.map((task) => (
                 <tr key={task.id} className="transition hover:bg-[#11171b]">
+                  <td className="px-5 py-4">
+                    <button type="button" className="grid h-8 w-8 place-items-center rounded-lg text-[#cbd5e1] transition hover:bg-[#0b0f12] hover:text-[#00f58a]" onClick={() => toggleTask(task.id)} aria-label={`Selecionar ${task.title}`}>
+                      {selected.includes(task.id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                    </button>
+                  </td>
                   <td className="px-5 py-4 font-semibold text-white">{task.title}</td>
                   <td className="px-5 py-4 text-[#cbd5e1]">{task.client_name ?? "Sem cliente"}</td>
                   <td className="px-5 py-4"><Badge tone="purple">{task.content_type}</Badge></td>
@@ -103,7 +161,7 @@ export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; c
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={8} className="px-5 py-10 text-center text-[#9ca3af]">Nenhuma tarefa encontrada.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={9} className="px-5 py-10 text-center text-[#9ca3af]">Nenhuma tarefa encontrada.</td></tr>}
             </tbody>
           </table>
         </div>
