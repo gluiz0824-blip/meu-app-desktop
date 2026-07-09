@@ -1,4 +1,4 @@
-import { CheckSquare, Plus, Square, Trash2 } from "lucide-react";
+import { CheckSquare, Eye, Plus, Square, Trash2 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { api } from "../services/api";
 import { Badge, Button, Card, Input, Modal, PriorityBadge, Select } from "../components/ui";
@@ -51,6 +51,7 @@ function TaskForm({ clients, initial, onCancel, onSaved }: { clients: Client[]; 
 export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; clients: Client[]; search: string; reload: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AnyRecord | null>(null);
+  const [viewing, setViewing] = useState<Task | null>(null);
   const [clientFilter, setClientFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -155,6 +156,7 @@ export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; c
                   <td className="px-5 py-4 text-[#cbd5e1]">{formatDate(task.post_date)}</td>
                   <td className="px-5 py-4">
                     <div className="flex gap-2">
+                      <Button variant="secondary" className="h-9 px-3" onClick={() => setViewing(task)}><Eye size={15} /> Abrir</Button>
                       <Button variant="secondary" className="h-9 px-3" onClick={() => { setEditing(task as unknown as AnyRecord); setOpen(true); }}>Editar</Button>
                       <Button variant="danger" className="h-9 px-3" onClick={() => remove(task)}>Excluir</Button>
                     </div>
@@ -168,6 +170,50 @@ export function TasksPage({ tasks, clients, search, reload }: { tasks: Task[]; c
       </Card>
       <Modal title={editing ? "Editar tarefa" : "Nova tarefa"} open={open} onClose={() => setOpen(false)}>
         <TaskForm clients={clients} initial={editing} onCancel={() => setOpen(false)} onSaved={async () => { setOpen(false); await reload(); }} />
+      </Modal>
+      <Modal title="Detalhes da tarefa" open={Boolean(viewing)} onClose={() => setViewing(null)}>
+        {viewing && (
+          <div className="grid gap-5">
+            <div className="rounded-lg border border-[#1e2a2f] bg-[#0b0f12] p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#00f58a]">{viewing.client_name ?? "Sem cliente"}</p>
+                  <h2 className="mt-2 text-2xl font-black text-white">{viewing.title}</h2>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone="purple">{viewing.content_type}</Badge>
+                  <Badge tone={viewing.status === "postado" ? "success" : viewing.status === "aguardando_aprovacao" ? "warning" : "blue"}>{statusLabel(viewing.status)}</Badge>
+                  <PriorityBadge priority={viewing.priority} />
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 text-sm text-[#cbd5e1] md:grid-cols-3">
+                <p><span className="block text-xs uppercase tracking-wide text-[#6b7280]">Entrega</span>{formatDate(viewing.due_date)}</p>
+                <p><span className="block text-xs uppercase tracking-wide text-[#6b7280]">Postagem</span>{formatDate(viewing.post_date)}</p>
+                <p><span className="block text-xs uppercase tracking-wide text-[#6b7280]">Plataforma</span>{viewing.platform || "Nao definida"}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="rounded-lg border border-[#1e2a2f] bg-[#070a0c] p-5">
+                <h3 className="mb-3 font-black text-white">Ideia / descricao</h3>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[#cbd5e1]">{viewing.description || "Sem descricao cadastrada."}</p>
+              </section>
+              <section className="rounded-lg border border-[#1e2a2f] bg-[#070a0c] p-5">
+                <h3 className="mb-3 font-black text-white">Legenda</h3>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[#cbd5e1]">{viewing.caption || "Sem legenda cadastrada."}</p>
+              </section>
+              <section className="rounded-lg border border-[#1e2a2f] bg-[#070a0c] p-5 lg:col-span-2">
+                <h3 className="mb-3 font-black text-white">Notas de producao</h3>
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[#cbd5e1]">{viewing.notes || "Sem notas cadastradas."}</p>
+              </section>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => { setEditing(viewing as unknown as AnyRecord); setViewing(null); setOpen(true); }}>Editar tarefa</Button>
+              <Button onClick={() => setViewing(null)}>Fechar</Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
