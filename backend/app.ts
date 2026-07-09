@@ -15,6 +15,14 @@ type GeneratedIdea = {
   notes: string;
 };
 
+type GeneratedPlanTask = GeneratedIdea & {
+  client_id: number | null;
+  client_name: string;
+  content_type: string;
+  platform: string;
+  due_date: string;
+};
+
 const app = express();
 const localDir = path.join(process.cwd(), "database");
 const localPath = path.join(localDir, "local-data.json");
@@ -157,6 +165,27 @@ function parseGeneratedIdea(text: string): GeneratedIdea {
   }
 }
 
+function parseGeneratedPlan(text: string): GeneratedPlanTask[] {
+  try {
+    const parsed = JSON.parse(text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim());
+    const tasks = Array.isArray(parsed) ? parsed : parsed.tasks;
+    if (!Array.isArray(tasks)) return [];
+    return tasks.map((task: any) => ({
+      client_id: task.client_id ?? null,
+      client_name: String(task.client_name ?? ""),
+      content_type: String(task.content_type ?? "post estatico"),
+      platform: String(task.platform ?? "Instagram"),
+      due_date: String(task.due_date ?? ""),
+      title: String(task.title ?? "Nova tarefa"),
+      description: String(task.description ?? ""),
+      caption: String(task.caption ?? ""),
+      notes: String(task.notes ?? "")
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function getClients() {
   if (hasSupabase && supabase) {
     const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false });
@@ -240,6 +269,67 @@ Responda somente em JSON valido, sem markdown, neste formato:
     const payload = await response.json() as any;
     if (!response.ok) throw new Error(payload?.error?.message || "Erro ao gerar ideia no Gemini.");
     res.json(parseGeneratedIdea(extractGeminiText(payload)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/ai/plan", async (req, res, next) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "Configure GEMINI_API_KEY nas variaveis de ambiente." });
+
+    const { startDate, clients } = req.body ?? {};
+    const prompt = `
+Voce e um planejador editorial de social media. Crie tarefas datadas para uma semana.
+
+Data inicial da semana: ${startDate}
+Clientes e cadencia semanal:
+${JSON.stringify(clients, null, 2)}
+
+Regras:
+- Crie exatamente a quantidade semanal informada em postsPerWeek para cada cliente.
+- Distribua as datas entre segunda e sexta, sem concentrar tudo no mesmo dia.
+- Use due_date em formato YYYY-MM-DD.
+- Varie content_type entre post estatico, carrossel, reels, stories e video conforme fizer sentido.
+- Gere ideias especificas para cada segmento.
+- Responda somente JSON valido, sem markdown.
+
+Formato:
+{
+  "tasks": [
+    {
+      "client_id": 1,
+      "client_name": "Nome",
+      "due_date": "YYYY-MM-DD",
+      "content_type": "post estatico",
+      "platform": "Instagram",
+      "title": "titulo curto",
+      "description": "ideia e estrutura do conteudo",
+      "caption": "legenda sugerida",
+      "notes": "observacoes de producao"
+    }
+  ]
+}
+`.trim();
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.75,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    const payload = await response.json() as any;
+    if (!response.ok) throw new Error(payload?.error?.message || "Erro ao gerar planejamento no Gemini.");
+    const tasks = parseGeneratedPlan(extractGeminiText(payload));
+    if (!tasks.length) throw new Error("O Gemini nao retornou tarefas validas.");
+    res.json({ tasks });
   } catch (error) {
     next(error);
   }
