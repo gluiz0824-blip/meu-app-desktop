@@ -10,5 +10,5 @@
     "types": ["node"],
     "outDir": "dist-server"
   },
-  "include": ["backend", "vite.config.ts"]
+  "include": ["backend", "api", "vite.config.ts"]
 }
