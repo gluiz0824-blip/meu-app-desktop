@@ -1,5 +1,6 @@
 import "dotenv/config";
 import cors from "cors";
+import crypto from "node:crypto";
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,9 +12,64 @@ type Task = Record<string, any>;
 const app = express();
 const localDir = path.join(process.cwd(), "database");
 const localPath = path.join(localDir, "local-data.json");
+const authCookie = "pulso_session";
+const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
+
+function getAuthSecret() {
+  return process.env.AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "local-development-secret";
+}
+
+function sign(value: string) {
+  return crypto.createHmac("sha256", getAuthSecret()).update(value).digest("base64url");
+}
+
+function createSessionToken() {
+  const payload = Buffer.from(JSON.stringify({ exp: Date.now() + sessionMaxAgeSeconds * 1000 })).toString("base64url");
+  return `${payload}.${sign(payload)}`;
+}
+
+function parseCookies(header?: string) {
+  return Object.fromEntries(
+    String(header ?? "")
+      .split(";")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const index = item.indexOf("=");
+        return [item.slice(0, index), decodeURIComponent(item.slice(index + 1))];
+      })
+  );
+}
+
+function isValidSession(token?: string) {
+  if (!token) return false;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature || sign(payload) !== signature) return false;
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return Number(session.exp) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function cookieOptions(maxAge: number) {
+  return [
+    `${authCookie}=`,
+    `Max-Age=${maxAge}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    process.env.NODE_ENV === "production" ? "Secure" : ""
+  ].filter(Boolean).join("; ");
+}
+
+function hasSession(req: express.Request) {
+  return isValidSession(parseCookies(req.headers.cookie)[authCookie]);
+}
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -93,6 +149,27 @@ async function getTasks() {
 }
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, database: hasSupabase ? "supabase" : "local-json" }));
+
+app.get("/api/auth/me", (req, res) => res.json({ authenticated: hasSession(req) }));
+
+app.post("/api/auth/login", (req, res) => {
+  const password = String(req.body?.password ?? "");
+  const expected = process.env.ADMIN_PASSWORD;
+  if (!expected) return res.status(500).json({ error: "Configure ADMIN_PASSWORD nas variaveis de ambiente." });
+  if (password !== expected) return res.status(401).json({ error: "Senha invalida." });
+  res.setHeader("Set-Cookie", cookieOptions(sessionMaxAgeSeconds).replace(`${authCookie}=`, `${authCookie}=${createSessionToken()}`));
+  res.json({ authenticated: true });
+});
+
+app.post("/api/auth/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", cookieOptions(0));
+  res.status(204).end();
+});
+
+app.use("/api", (req, res, next) => {
+  if (hasSession(req)) return next();
+  return res.status(401).json({ error: "Login necessario." });
+});
 
 app.get("/api/clients", async (_req, res, next) => {
   try { res.json(await getClients()); } catch (error) { next(error); }

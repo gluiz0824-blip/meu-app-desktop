@@ -8,6 +8,7 @@ import {
   CircleHelp,
   KanbanSquare,
   LayoutDashboard,
+  LogOut,
   Menu,
   Search,
   Settings,
@@ -67,7 +68,7 @@ type NotificationTask = {
   overdue?: boolean;
 };
 
-export function AppLayout({ page, setPage, search, setSearch, notifications, children }: { page: PageId; setPage: (page: PageId) => void; search: string; setSearch: (value: string) => void; notifications: NotificationTask[]; children: ReactNode }) {
+export function AppLayout({ page, setPage, search, setSearch, notifications, onLogout, children }: { page: PageId; setPage: (page: PageId) => void; search: string; setSearch: (value: string) => void; notifications: NotificationTask[]; onLogout: () => void; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const todayCount = notifications.filter((task) => !task.overdue).length;
@@ -174,7 +175,9 @@ export function AppLayout({ page, setPage, search, setSearch, notifications, chi
                 <p className="text-sm font-bold">Luiz Guilherme</p>
                 <p className="text-xs text-[#9ca3af]">Social Media</p>
               </div>
-              <ChevronDown size={16} className="text-[#9ca3af]" />
+              <Button variant="ghost" className="h-10 w-10 p-0" onClick={onLogout} title="Sair">
+                <LogOut size={17} />
+              </Button>
             </div>
           </div>
         </header>

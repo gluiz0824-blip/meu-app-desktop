@@ -66,7 +66,46 @@ function QuickTaskModal({ open, status, clients, onClose, onSaved }: { open: boo
   );
 }
 
+function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.login(password);
+      onLoggedIn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nao foi possivel entrar.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="grid min-h-screen place-items-center px-5 text-white">
+      <form className="w-full max-w-md rounded-lg border border-[#1e2a2f] bg-[#070a0c]/95 p-8 shadow-2xl shadow-black/40" onSubmit={submit}>
+        <div className="mb-8">
+          <p className="text-sm font-bold uppercase tracking-[0.32em] text-[#00f58a]">Pulso Social</p>
+          <h1 className="mt-3 text-3xl font-black">Entrar no sistema</h1>
+          <p className="mt-2 text-sm text-[#9ca3af]">Acesso restrito ao painel de clientes, tarefas e relatorios.</p>
+        </div>
+        <label className="grid gap-2 text-sm text-[#cbd5e1]">
+          Senha
+          <Input autoFocus required type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        </label>
+        {error && <p className="mt-4 rounded-lg border border-[#5c1b20] bg-[#2a0e11] px-4 py-3 text-sm text-[#ffb4b4]">{error}</p>}
+        <Button className="mt-6 w-full" disabled={submitting}>{submitting ? "Entrando..." : "Entrar"}</Button>
+      </form>
+    </main>
+  );
+}
+
 export function App() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [page, setPageState] = useState<PageId>(() => pathToPage[window.location.pathname] ?? "dashboard");
   const [search, setSearch] = useState("");
   const [clients, setClients] = useState<Client[]>([]);
@@ -96,7 +135,12 @@ export function App() {
   };
 
   useEffect(() => {
-    void load();
+    void api.me()
+      .then((session) => {
+        setAuthenticated(session.authenticated);
+        if (session.authenticated) void load();
+      })
+      .catch(() => setAuthenticated(false));
   }, []);
   useEffect(() => {
     const onPop = () => setPageState(pathToPage[window.location.pathname] ?? "dashboard");
@@ -127,8 +171,19 @@ export function App() {
     return <Placeholder title="Modulo" />;
   }, [page, loading, clients, tasks, dashboard, search, selectedClient]);
 
+  const logout = async () => {
+    await api.logout().catch(() => undefined);
+    setAuthenticated(false);
+    setClients([]);
+    setTasks([]);
+    setDashboard(null);
+  };
+
+  if (authenticated === null) return <Placeholder title="Carregando sistema" />;
+  if (!authenticated) return <LoginScreen onLoggedIn={async () => { setAuthenticated(true); await load(); }} />;
+
   return (
-    <AppLayout page={page} setPage={setPage} search={search} setSearch={setSearch} notifications={notifications}>
+    <AppLayout page={page} setPage={setPage} search={search} setSearch={setSearch} notifications={notifications} onLogout={logout}>
       {content}
       <QuickTaskModal open={quickOpen} status={quickStatus} clients={clients} onClose={() => setQuickOpen(false)} onSaved={async () => { setQuickOpen(false); await load(); }} />
     </AppLayout>

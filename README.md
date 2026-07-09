@@ -38,6 +38,17 @@ supabase/schema.sql
 
 Use `SUPABASE_SERVICE_ROLE_KEY` apenas no backend/API, nunca no frontend publico.
 
+## Login
+
+Defina tambem estas variaveis no `.env` local e na Vercel:
+
+```text
+ADMIN_PASSWORD=sua-senha-de-acesso
+AUTH_SECRET=um-segredo-longo-aleatorio
+```
+
+`ADMIN_PASSWORD` e a senha usada na tela de login. `AUTH_SECRET` assina o cookie de sessao.
+
 ## Rotas principais
 
 - `/dashboard`
